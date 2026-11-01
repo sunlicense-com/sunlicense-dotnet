@@ -185,7 +185,7 @@ namespace SunLicense
             try
             {
                 var id = ChartId(name);
-                if (id == null || uses < 1 || OptedOut())
+                if (id == null || uses < 1 || _closed || OptedOut())
                 {
                     return this;
                 }
@@ -194,6 +194,11 @@ namespace SunLicense
                 {
                     if (!_features.TryGetValue(id, out var count))
                     {
+                        if (_features.Count >= MaxFeatures)
+                        {
+                            return this; // at most 50 different features
+                        }
+
                         _featureOrder.Add(id);
                     }
 
@@ -500,8 +505,9 @@ namespace SunLicense
                     foreach (var pair in (value as IDictionary<string, int[]>) ?? new Dictionary<string, int[]>())
                     {
                         var key = Clean(pair.Key, 64);
-                        var nums = (pair.Value ?? new int[0]).Take(MaxBar).ToList();
-                        if (key != null && nums.Count > 0 && nums.All(x => Math.Abs((long)x) <= MaxNumber) && bars.Count < MaxValues)
+                        // up to 20 numbers, until the first that is too big
+                        var nums = (pair.Value ?? new int[0]).Take(MaxBar).TakeWhile(x => Math.Abs((long)x) <= MaxNumber).ToList();
+                        if (key != null && nums.Count > 0 && bars.Count < MaxValues)
                         {
                             bars[key] = nums.Cast<object>().ToList();
                         }
@@ -628,6 +634,12 @@ namespace SunLicense
 
             if (OptedOut())
             {
+                lock (_lock)
+                {
+                    _features.Clear(); // nothing is counted while it's off
+                    _featureOrder.Clear();
+                }
+
                 return new Answer(0, null);
             }
 
@@ -638,6 +650,11 @@ namespace SunLicense
             }
 
             var body = Json(report);
+            if (Encoding.UTF8.GetByteCount(body) > MaxBody && report.Remove("charts"))
+            {
+                body = Json(report); // charts go first, then features
+            }
+
             if (Encoding.UTF8.GetByteCount(body) > MaxBody)
             {
                 foreach (var key in report.Keys.Where(k => !CoreKeys.Contains(k)).ToList())

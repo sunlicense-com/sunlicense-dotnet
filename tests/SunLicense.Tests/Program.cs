@@ -252,7 +252,17 @@ await Test("features: at most 50 per report, the rest wait", async () =>
 
     await a.SendNowAsync();
     await a.SendNowAsync();
-    Check(recorder.Seen[0].Body["features"].AsObject().Count == 50 && recorder.Seen[1].Body["features"].AsObject().Count == 10, "50 + 10");
+    Check(recorder.Seen[0].Body["features"].AsObject().Count == 50, "50 different features");
+    Check(recorder.Seen[1].Body["features"] == null, "the other 10 were never counted");
+    var on = true;
+    var r2 = new Recorder();
+    var b = Make(new SunLicenseAnalyticsOptions { ProductAnalyticsId = "pa_x", EnabledProvider = () => on }, r2);
+    b.Feature("auto-sell");
+    on = false;
+    Check(await b.SendNowAsync() == 0, "off");
+    on = true;
+    await b.SendNowAsync();
+    Check(r2.Seen[0].Body["features"] == null, "counts dropped while off");
 });
 
 await Test("custom charts: every type, the wire shape of spec 185 section 4.6", async () =>
@@ -269,7 +279,7 @@ await Test("custom charts: every type, the wire shape of spec 185 section 4.6", 
         .SingleLine("players", () => 42)
         .MultiLine("worlds", () => new Dictionary<string, int> { ["overworld"] = 30, ["nether"] = -2 })
         .SimpleBar("commands", () => new Dictionary<string, int> { ["sell"] = 12 })
-        .AdvancedBar("tiers", () => new Dictionary<string, int[]> { ["gold"] = new[] { 1, 2, 3 }, ["empty"] = new int[0] })
+        .AdvancedBar("tiers", () => new Dictionary<string, int[]> { ["gold"] = new[] { 1, 2, 3 }, ["empty"] = new int[0], ["big"] = new[] { 1, 2000000000 } })
         .SimplePie("nothing", () => null)
         .SimplePie("empty", () => "  ")
         .SingleLine("huge", () => 2000000000)
@@ -286,7 +296,7 @@ await Test("custom charts: every type, the wire shape of spec 185 section 4.6", 
         {""id"":""players"",""type"":""single_line"",""data"":{""value"":42}},
         {""id"":""worlds"",""type"":""multi_line"",""data"":{""values"":{""overworld"":30,""nether"":-2}}},
         {""id"":""commands"",""type"":""simple_bar"",""data"":{""values"":{""sell"":12}}},
-        {""id"":""tiers"",""type"":""advanced_bar"",""data"":{""values"":{""gold"":[1,2,3]}}}]");
+        {""id"":""tiers"",""type"":""advanced_bar"",""data"":{""values"":{""gold"":[1,2,3],""big"":[1]}}}]");
     Check(JsonNode.DeepEquals(recorder.Seen[0].Body["charts"], expected), recorder.Seen[0].Body["charts"].ToJsonString());
 });
 
@@ -313,7 +323,8 @@ await Test("custom charts: same id replaces, at most 30; a report over 16 KB kee
     big.Feature("kept");
     Check(await big.SendNowAsync() == 204, "204");
     var body = recorder.Seen[1].Body;
-    Check(body["charts"] == null && body["features"] == null && body["metrics"] != null, "stripped");
+    Check(body["charts"] == null && body["metrics"] != null, "charts dropped first");
+    Check(JsonNode.DeepEquals(body["features"], JsonNode.Parse("{\"kept\":1}")), "features kept in the report");
     await big.SendNowAsync();
     Check(recorder.Seen[2].Raw.Length > 0, "still sends");
 });
