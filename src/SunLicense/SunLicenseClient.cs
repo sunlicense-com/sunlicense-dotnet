@@ -34,7 +34,7 @@ namespace SunLicense
     public sealed class SunLicenseClient : IDisposable
     {
         /// <summary>The version of this client.</summary>
-        public const string Version = "0.0.1";
+        public const string Version = "0.1.0";
 
         private readonly string _baseUrl;
         private readonly string _token;
@@ -138,6 +138,24 @@ namespace SunLicense
                     throw new SunLicenseException("SunLicense request timed out", e);
                 }
             }
+        }
+
+        /// <summary>
+        /// Starts built-in product analytics for a licensed product, with this client's base URL and API key:
+        /// a report every 30 minutes in the background (see <see cref="SunLicenseAnalytics"/>). Never throws.
+        /// </summary>
+        /// <param name="licenseKey">The license key you validate.</param>
+        /// <param name="fingerprint">The machine id you validate with (<c>host</c>).</param>
+        /// <param name="options">Other settings (product version, switch, product analytics id…).</param>
+        /// <returns>The reporter; dispose it when the product shuts down.</returns>
+        public SunLicenseAnalytics Analytics(string licenseKey, string fingerprint, SunLicenseAnalyticsOptions options = null)
+        {
+            var o = (options ?? new SunLicenseAnalyticsOptions()).Copy();
+            o.BaseUrl = o.BaseUrl ?? _baseUrl;
+            o.ApiKey = o.ApiKey ?? _token;
+            o.LicenseKey = licenseKey;
+            o.Fingerprint = fingerprint;
+            return SunLicenseAnalytics.Start(o);
         }
 
         /// <summary>Serialises a flat string dictionary to JSON without a JSON library.</summary>
