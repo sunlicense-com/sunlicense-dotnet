@@ -362,6 +362,10 @@ await Test("reports in the background to a real HTTP server, and Dispose stops i
     Check(agent.StartsWith("sunlicense-dotnet/"), "User-Agent");
 });
 
+var (protectionCount, protectionFailed) = await ProtectionTests.Run();
+count += protectionCount;
+failed += protectionFailed;
+
 Console.WriteLine($"{count} tests, {failed} failed");
 return failed == 0 ? 0 : 1;
 

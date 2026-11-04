@@ -34,13 +34,14 @@ namespace SunLicense
     public sealed class SunLicenseClient : IDisposable
     {
         /// <summary>The version of this client.</summary>
-        public const string Version = "0.1.0";
+        public const string Version = "0.2.0";
 
         private readonly string _baseUrl;
         private readonly string _token;
         private readonly HttpClient _httpClient;
         private readonly bool _ownsHttpClient;
         private bool _disposed;
+        private volatile SunLicenseProtection _protection;
 
         /// <summary>
         /// Creates a client for the given SunLicense instance.
@@ -111,6 +112,32 @@ namespace SunLicense
                 }
             }
 
+            // With Protection(...): send its integrity result, then let it keep (valid + unlock) or forget
+            // (valid: false) the unlock. Outages change nothing.
+            var protection = _protection;
+            if (protection != null)
+            {
+                payload.TryGetValue("fingerprint", out var fp);
+                if (fp == null)
+                {
+                    payload.TryGetValue("hwid", out fp);
+                }
+
+                if (fp == null)
+                {
+                    payload.TryGetValue("host", out fp);
+                }
+
+                protection.License(licenseKey, fp ?? protection.Fingerprint);
+                foreach (var pair in protection.ValidateFields())
+                {
+                    if (!payload.ContainsKey(pair.Key))
+                    {
+                        payload[pair.Key] = pair.Value;
+                    }
+                }
+            }
+
             using (var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl + "/api/v2/license/validate"))
             {
                 request.Content = new StringContent(ToJson(payload), Encoding.UTF8, "application/json");
@@ -126,6 +153,7 @@ namespace SunLicense
                     using (var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false))
                     {
                         var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        protection?.Accept(body);
                         return new ValidationResult(response.IsSuccessStatusCode, (int)response.StatusCode, body);
                     }
                 }
@@ -156,6 +184,22 @@ namespace SunLicense
             o.LicenseKey = licenseKey;
             o.Fingerprint = fingerprint;
             return SunLicenseAnalytics.Start(o);
+        }
+
+        /// <summary>
+        /// Core unlock, tamper reports, the ownership notice and protected files, with this client's base URL and API
+        /// key (see <see cref="SunLicenseProtection"/>). Every later <see cref="ValidateAsync"/> sends its integrity
+        /// result and keeps or forgets the unlock.
+        /// </summary>
+        /// <param name="options">License key, machine id, product and owner names, terms link, product code, cache folder.</param>
+        /// <returns>The protection helper.</returns>
+        public SunLicenseProtection Protection(SunLicenseProtectionOptions options = null)
+        {
+            var o = (options ?? new SunLicenseProtectionOptions()).Copy();
+            o.BaseUrl = o.BaseUrl ?? _baseUrl;
+            o.ApiKey = o.ApiKey ?? _token;
+            _protection = new SunLicenseProtection(o);
+            return _protection;
         }
 
         /// <summary>Serialises a flat string dictionary to JSON without a JSON library.</summary>
