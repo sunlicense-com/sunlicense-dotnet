@@ -423,7 +423,7 @@ namespace SunLicense
             }
 
             var url = _baseUrl + "/api/v2/protected-files/" + Uri.EscapeDataString(_productCode) + "/" + Uri.EscapeDataString(name);
-            var headers = new Dictionary<string, string> { ["license"] = _licenseKey };
+            var headers = new Dictionary<string, string> { ["X-License-Key"] = _licenseKey };
             if (_apiKey != null)
             {
                 headers["Authorization"] = "Bearer " + _apiKey;
@@ -431,7 +431,7 @@ namespace SunLicense
 
             if (_fingerprint != null)
             {
-                headers["fingerprint"] = _fingerprint;
+                headers["X-Fingerprint"] = _fingerprint;
             }
 
             KeyValuePair<int, byte[]> answer;

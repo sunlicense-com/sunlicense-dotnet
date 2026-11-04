@@ -297,7 +297,7 @@ static class ProtectionTests
             var p = Make(more: o => { o.ProductCode = "my script"; o.ApiKey = "sk_test"; o.Get = get; });
             Check(Encoding.UTF8.GetString(await p.ProtectedFileAsync("rules.dat")) == "RULES", "body");
             Check(url == "https://api.example.test/api/v2/protected-files/my%20script/rules.dat", url);
-            Check(headers["Authorization"] == "Bearer sk_test" && headers["license"] == Key && headers["fingerprint"] == "machine-1", "headers");
+            Check(headers["Authorization"] == "Bearer sk_test" && headers["X-License-Key"] == Key && headers["X-Fingerprint"] == "machine-1", "headers");
             status = 403;
             body = "{\"code\":\"SUSPENDED\"}";
             try
