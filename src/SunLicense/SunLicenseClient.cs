@@ -34,7 +34,7 @@ namespace SunLicense
     public sealed class SunLicenseClient : IDisposable
     {
         /// <summary>The version of this client.</summary>
-        public const string Version = "0.1.0";
+        public const string Version = "0.2.0";
 
         private readonly string _baseUrl;
         private readonly string _token;

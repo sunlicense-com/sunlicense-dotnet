@@ -91,6 +91,41 @@ its own errors.
 
 Docs: https://docs.sunlicense.com/guide/sdks#built-in-analytics
 
+## Protection: core unlock, tamper reports, ownership notice
+
+`sunlicense seal <file> --product <code> [--digest <files>]` (the [CLI](https://docs.sunlicense.com/cli/)) encrypts
+part of your product, its *core*, on SunLicense's servers under a key only they hold, and prints the sealed text
+(`SLS1.…`) you ship. A valid license check answers with that key (`unlock`); a refused one (suspended, expired,
+revoked) doesn't, and this SDK forgets the one it had. So a copy whose license check was cut out can't run its core.
+The unlock from the last valid check is cached for 7 days (in `CacheDirectory`, default `~/.sunlicense`), encrypted under a key bound to the license key,
+the machine id and this machine, so outages don't stop your customers.
+
+```csharp
+using var client = new SunLicenseClient("https://api.sunlicense.com", apiKey);
+var protection = client.Protection(new SunLicenseProtectionOptions {
+    LicenseKey = key, Fingerprint = machineId, Product = "My App", Owner = "Example Studio",
+    Terms = "https://example.com/terms", CacheDirectory = dataFolder });
+Console.WriteLine(protection.Notice());        // product, owner, masked key
+await client.ValidateAsync(key, new Dictionary<string, string> { ["fingerprint"] = machineId });
+byte[] core = protection.Unseal(SealedCore);   // throws SunLicenseLockedException without a valid unlock
+protection.Integrity(AppContext.BaseDirectory); // "OK" / "MODIFIED", sent with the next check
+```
+
+- `unseal(sealed)`: the core, or throws `SunLicenseLockedException` without a valid unlock (or for data sealed for another product).
+- `integrity(...)`: compares the files whose digests were sealed with the core (`--digest`) with what is running;
+  `OK` or `MODIFIED` (with the changed files) is sent with the next check, where Sentinel sees it.
+- `notice()`: `My Bot is licensed software by Example Studio. License AX8P-XXXX-XXXX-XXXX. Terms: …`; never the full
+  key or the buyer's name.
+- `await protection.ProtectedFileAsync(name)`: a file uploaded to the product (Standard plan), sent only while the license is valid.
+- `accept(body)` and `ValidateFields()`: for your own HTTP code; the client does both when you create the protection from it.
+- AES-GCM runs on the platform's AES block cipher, so it works on netstandard2.0, Mono, Unity and CitizenFX. No offline
+  license file yet (no Ed25519 in netstandard2.0).
+
+Honest limit: someone with a valid license can still extract the unlock and patch their copy; that copy then fails
+its integrity check and is reported. Protection raises the cost and makes leaks visible. Wire format and test
+vectors: `tests/SunLicense.Tests/fixtures/protection-test-vectors.json` (a copy of SunLicense's); docs:
+https://docs.sunlicense.com/guide/protection
+
 ## Requirements
 
 **.NET Standard 2.0** — works with .NET Framework 4.6.1+, .NET Core 2.0+, .NET 5–10, Mono
@@ -111,6 +146,7 @@ Also available for **Java**, **JavaScript**, **Python**, **PHP** and **Lua**.
 
 ## Changelog
 
+- **0.2.0**: core unlock, tamper reports, the ownership notice and protected files: `client.Protection()`, `SunLicenseProtection`.
 - **0.1.0**: built-in product analytics (opt-out), feature usage and custom charts: `client.Analytics()`, `SunLicenseAnalytics.ForProduct()`.
 
 ## Tests
